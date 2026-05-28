@@ -3,7 +3,6 @@
 let sidebar = null;
 let isScanning = false;
 
-// Listen for messages from popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "START_SCAN") {
     startScan(message.apiKey);
@@ -16,7 +15,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     toggleSidebar();
     sendResponse({ success: true });
   }
+  if (message.type === "DEBUG_PAGE") {
+    sendResponse({ html: debugPage() });
+  }
 });
+
+function debugPage() {
+  // Return useful debug info about what's on the page
+  return {
+    url: location.href,
+    bodyClasses: document.body.className.slice(0, 200),
+    jobCardCount: document.querySelectorAll('[data-job-id], [data-occludable-job-id], .job-card-container').length,
+    listItemCount: document.querySelectorAll('.jobs-search-results__list-item').length,
+    scaffoldCount: document.querySelectorAll('.scaffold-layout__list-item').length,
+    sampleHTML: document.querySelector('.jobs-search-results__list, .jobs-search-results-grid, [class*="jobs-search"]')?.innerHTML?.slice(0, 500) || "No job list found"
+  };
+}
 
 function toggleSidebar() {
   if (sidebar) {
@@ -46,7 +60,6 @@ function createSidebar() {
   `;
 
   document.body.appendChild(sidebar);
-
   document.getElementById("ljs-close-btn").addEventListener("click", () => {
     sidebar.classList.add("ljs-hidden");
   });
@@ -61,23 +74,38 @@ async function startScan(apiKey) {
   showScanning("Collecting job listings...");
 
   try {
-    const jobs = await collectJobs();
+    const jobs = collectJobs();
 
     if (jobs.length === 0) {
+      // Show debug info to help diagnose
+      const debug = debugPage();
       showError(
-        "No jobs found on this page. Make sure you're on a LinkedIn Jobs search results page.",
+        `No jobs found on this page.<br><br>` +
+        `<small style="color:#64748b">` +
+        `URL: ${debug.url.slice(0, 60)}<br>` +
+        `Job cards found: ${debug.jobCardCount}<br>` +
+        `List items: ${debug.listItemCount}<br>` +
+        `Scaffold items: ${debug.scaffoldCount}<br><br>` +
+        `Make sure you're on a LinkedIn job search results page and jobs are visible.</small>`
       );
       isScanning = false;
       return;
     }
 
-    showScanning(`Analyzing ${jobs.length} jobs with Claude AI...`);
+    showScanning(`Found ${jobs.length} jobs — asking Claude AI...`);
 
-    const response = await chrome.runtime.sendMessage({
+    // Add a timeout so it never hangs forever
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Request timed out after 30 seconds")), 30000)
+    );
+
+    const responsePromise = chrome.runtime.sendMessage({
       type: "ANALYZE_JOBS",
       jobs,
-      apiKey,
+      apiKey
     });
+
+    const response = await Promise.race([responsePromise, timeoutPromise]);
 
     if (!response.success) {
       showError("Claude API error: " + response.error);
@@ -85,58 +113,107 @@ async function startScan(apiKey) {
       return;
     }
 
-    // Merge analysis back with original jobs
     const enriched = response.data.map((analysis, i) => ({
       ...jobs[i],
-      ...analysis,
+      ...analysis
     }));
 
     showResults(enriched);
+
   } catch (err) {
-    showError("Something went wrong: " + err.message);
+    showError("Error: " + err.message);
   }
 
   isScanning = false;
 }
 
-async function collectJobs() {
+function collectJobs() {
   const jobs = [];
+  const seen = new Set();
 
-  // LinkedIn job card selectors
-  const jobCards = document.querySelectorAll(
-    ".job-card-container, .jobs-search-results__list-item, [data-occludable-job-id]",
-  );
+  // Try multiple selector strategies — LinkedIn changes their DOM frequently
+  const strategies = [
+    // Strategy 1: data-job-id attribute (most reliable)
+    () => document.querySelectorAll('[data-job-id]'),
+    // Strategy 2: occludable job id
+    () => document.querySelectorAll('[data-occludable-job-id]'),
+    // Strategy 3: classic job card container
+    () => document.querySelectorAll('.job-card-container'),
+    // Strategy 4: search result list items
+    () => document.querySelectorAll('.jobs-search-results__list-item'),
+    // Strategy 5: scaffold layout list items (newer LinkedIn)
+    () => document.querySelectorAll('.scaffold-layout__list-item'),
+    // Strategy 6: any li inside the jobs list
+    () => document.querySelectorAll('.jobs-search-results__list li, [class*="jobs-search-results"] li'),
+  ];
 
-  for (const card of jobCards) {
-    try {
-      const titleEl = card.querySelector(
-        '.job-card-list__title, .job-card-container__link, [class*="job-card"] a',
-      );
-      const companyEl = card.querySelector(
-        '.job-card-container__company-name, .artdeco-entity-lockup__subtitle span, [class*="company"]',
-      );
-      const locationEl = card.querySelector(
-        '.job-card-container__metadata-item, [class*="location"], .artdeco-entity-lockup__caption',
-      );
-
-      const title = titleEl?.innerText?.trim() || "Unknown Title";
-      const company = companyEl?.innerText?.trim() || "Unknown Company";
-      const location = locationEl?.innerText?.trim() || "Unknown Location";
-
-      if (title !== "Unknown Title" || company !== "Unknown Company") {
-        jobs.push({ title, company, location, description: "" });
-      }
-    } catch (e) {
-      // Skip bad cards
+  let cards = [];
+  for (const strategy of strategies) {
+    const found = strategy();
+    if (found.length > 0) {
+      cards = Array.from(found);
+      break;
     }
   }
 
-  // Try to get description from the currently open job panel
-  const descriptionEl = document.querySelector(
-    '.jobs-description__content, .job-view-layout, [class*="description"]',
-  );
-  if (descriptionEl && jobs.length > 0) {
-    jobs[0].description = descriptionEl.innerText.trim().slice(0, 2000);
+  for (const card of cards) {
+    try {
+      // Title — try many selectors
+      const titleEl =
+        card.querySelector('.job-card-list__title--link') ||
+        card.querySelector('.job-card-list__title') ||
+        card.querySelector('[class*="job-card-list__title"]') ||
+        card.querySelector('a[class*="job-card"]') ||
+        card.querySelector('strong') ||
+        card.querySelector('a[href*="/jobs/view/"]');
+
+      // Company
+      const companyEl =
+        card.querySelector('.job-card-container__primary-description') ||
+        card.querySelector('.job-card-container__company-name') ||
+        card.querySelector('[class*="company-name"]') ||
+        card.querySelector('.artdeco-entity-lockup__subtitle') ||
+        card.querySelector('[class*="subtitle"]');
+
+      // Location
+      const locationEl =
+        card.querySelector('.job-card-container__metadata-item') ||
+        card.querySelector('[class*="metadata"]') ||
+        card.querySelector('.artdeco-entity-lockup__caption') ||
+        card.querySelector('[class*="location"]') ||
+        card.querySelector('[class*="caption"]');
+
+      const title = titleEl?.innerText?.trim() || titleEl?.textContent?.trim();
+      const company = companyEl?.innerText?.trim() || companyEl?.textContent?.trim();
+      const location = locationEl?.innerText?.trim() || locationEl?.textContent?.trim();
+
+      // Skip if no meaningful data or duplicate
+      if (!title && !company) continue;
+      const key = `${title}|${company}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      jobs.push({
+        title: title || "Unknown Title",
+        company: company || "Unknown Company",
+        location: location || "Unknown Location",
+        description: ""
+      });
+
+    } catch (e) {
+      // Skip bad cards silently
+    }
+  }
+
+  // Also grab the currently visible job description panel
+  const descEl =
+    document.querySelector('.jobs-description__content') ||
+    document.querySelector('.jobs-description-content') ||
+    document.querySelector('[class*="jobs-description"]') ||
+    document.querySelector('.job-view-layout');
+
+  if (descEl && jobs.length > 0) {
+    jobs[0].description = descEl.innerText.trim().slice(0, 3000);
   }
 
   return jobs;
@@ -160,9 +237,15 @@ function showError(message) {
     <div class="ljs-error">
       <span class="ljs-error-icon">⚠️</span>
       <p>${message}</p>
-      <button class="ljs-btn" onclick="location.reload()">Retry</button>
+      <button class="ljs-btn" id="ljs-retry-btn">↻ Try Again</button>
     </div>
   `;
+  document.getElementById("ljs-retry-btn")?.addEventListener("click", () => {
+    isScanning = false;
+    chrome.storage.local.get("apiKey", ({ apiKey }) => {
+      if (apiKey) startScan(apiKey);
+    });
+  });
 }
 
 function showResults(jobs) {
@@ -170,17 +253,17 @@ function showResults(jobs) {
   if (!body) return;
 
   const seniorityColor = {
-    Junior: "#22c55e",
-    Mid: "#3b82f6",
-    Senior: "#f59e0b",
-    Lead: "#ef4444",
-    Principal: "#8b5cf6",
+    "Junior": "#22c55e",
+    "Mid": "#3b82f6",
+    "Senior": "#f59e0b",
+    "Lead": "#ef4444",
+    "Principal": "#8b5cf6"
   };
 
   const jobTypeIcon = {
-    Remote: "🌐",
-    Hybrid: "🏠",
-    "On-site": "🏢",
+    "Remote": "🌐",
+    "Hybrid": "🏠",
+    "On-site": "🏢"
   };
 
   body.innerHTML = `
@@ -189,52 +272,49 @@ function showResults(jobs) {
       <button class="ljs-rescan-btn" id="ljs-rescan">↻ Rescan</button>
     </div>
     <div class="ljs-jobs-list">
-      ${jobs
-        .map(
-          (job, i) => `
+      ${jobs.map((job, i) => `
         <div class="ljs-job-card" data-index="${i}">
           <div class="ljs-job-header">
             <div class="ljs-job-title-row">
               <span class="ljs-job-index">${i + 1}</span>
               <div>
-                <div class="ljs-job-title">${job.title || "Unknown Title"}</div>
-                <div class="ljs-job-company">${job.company || ""} · ${job.location || ""}</div>
+                <div class="ljs-job-title">${escHtml(job.title || "Unknown Title")}</div>
+                <div class="ljs-job-company">${escHtml(job.company || "")} · ${escHtml(job.location || "")}</div>
               </div>
             </div>
             <div class="ljs-badges">
               ${job.seniorityLevel ? `<span class="ljs-badge" style="background:${seniorityColor[job.seniorityLevel] || "#6b7280"}20;color:${seniorityColor[job.seniorityLevel] || "#6b7280"}">${job.seniorityLevel}</span>` : ""}
-              ${job.jobType ? `<span class="ljs-badge ljs-badge-type">${jobTypeIcon[job.jobType] || ""} ${job.jobType}</span>` : ""}
+              ${job.jobType ? `<span class="ljs-badge ljs-badge-type">${jobTypeIcon[job.jobType] || ""} ${escHtml(job.jobType)}</span>` : ""}
             </div>
           </div>
-          <div class="ljs-job-summary">${job.summary || ""}</div>
-          ${
-            job.keySkills?.length
-              ? `
+          <div class="ljs-job-summary">${escHtml(job.summary || "")}</div>
+          ${job.keySkills?.length ? `
             <div class="ljs-skills">
-              ${job.keySkills.map((s) => `<span class="ljs-skill">${s}</span>`).join("")}
+              ${job.keySkills.map(s => `<span class="ljs-skill">${escHtml(s)}</span>`).join("")}
             </div>
-          `
-              : ""
-          }
-          ${
-            job.highlights?.length
-              ? `
+          ` : ""}
+          ${job.highlights?.length ? `
             <div class="ljs-highlights">
-              ${job.highlights.map((h) => `<div class="ljs-highlight">✦ ${h}</div>`).join("")}
+              ${job.highlights.map(h => `<div class="ljs-highlight">✦ ${escHtml(h)}</div>`).join("")}
             </div>
-          `
-              : ""
-          }
+          ` : ""}
         </div>
-      `,
-        )
-        .join("")}
+      `).join("")}
     </div>
   `;
 
   document.getElementById("ljs-rescan")?.addEventListener("click", () => {
+    isScanning = false;
     chrome.storage.local.get("apiKey", ({ apiKey }) => {
       if (apiKey) startScan(apiKey);
     });
   });
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
