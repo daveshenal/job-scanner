@@ -63,17 +63,19 @@ async function render() {
   `;
 
   // Save API key
-  document.getElementById("save-key-btn").addEventListener("click", async () => {
-    const key = document.getElementById("api-key-input").value.trim();
-    if (!key) return;
-    await chrome.storage.local.set({ apiKey: key });
-    const indicator = document.getElementById("saved-indicator");
-    indicator.style.display = "inline";
-    setTimeout(() => indicator.style.display = "none", 2000);
-    document.getElementById("status-dot").className = "status-dot active";
-    document.getElementById("status-text").textContent = "Ready to scan";
-    document.getElementById("scan-btn").disabled = false;
-  });
+  document
+    .getElementById("save-key-btn")
+    .addEventListener("click", async () => {
+      const key = document.getElementById("api-key-input").value.trim();
+      if (!key) return;
+      await chrome.storage.local.set({ apiKey: key });
+      const indicator = document.getElementById("saved-indicator");
+      indicator.style.display = "inline";
+      setTimeout(() => (indicator.style.display = "none"), 2000);
+      document.getElementById("status-dot").className = "status-dot active";
+      document.getElementById("status-text").textContent = "Ready to scan";
+      document.getElementById("scan-btn").disabled = false;
+    });
 
   // Scan button
   document.getElementById("scan-btn").addEventListener("click", async () => {
@@ -81,7 +83,10 @@ async function render() {
     if (!storedKey) return;
     document.getElementById("scan-btn").disabled = true;
     document.getElementById("scan-btn").textContent = "Scanning...";
-    await chrome.tabs.sendMessage(tab.id, { type: "START_SCAN", apiKey: storedKey });
+    await chrome.tabs.sendMessage(tab.id, {
+      type: "START_SCAN",
+      apiKey: storedKey,
+    });
     window.close();
   });
 
@@ -91,25 +96,30 @@ async function render() {
     window.close();
   });
 
-  // Debug button — shows what the extension actually sees on the page
+  // Debug button - shows what the extension actually sees on the page
   document.getElementById("debug-btn").addEventListener("click", async () => {
     const debugOut = document.getElementById("debug-output");
     debugOut.style.display = "block";
     debugOut.textContent = "Inspecting page...";
     try {
-      const response = await chrome.tabs.sendMessage(tab.id, { type: "DEBUG_PAGE" });
+      const response = await chrome.tabs.sendMessage(tab.id, {
+        type: "DEBUG_PAGE",
+      });
       const d = response.html;
       debugOut.innerHTML = `
         <b style="color:#94a3b8">Page Debug Info</b><br>
         URL: ${d.url.slice(0, 80)}<br><br>
-        Job cards [data-job-id]: <b style="color:${d.jobCardCount > 0 ? '#22c55e' : '#ef4444'}">${d.jobCardCount}</b><br>
-        List items: <b style="color:${d.listItemCount > 0 ? '#22c55e' : '#ef4444'}">${d.listItemCount}</b><br>
-        Scaffold items: <b style="color:${d.scaffoldCount > 0 ? '#22c55e' : '#ef4444'}">${d.scaffoldCount}</b><br><br>
+        Job cards [data-job-id]: <b style="color:${d.jobCardCount > 0 ? "#22c55e" : "#ef4444"}">${d.jobCardCount}</b><br>
+        List items: <b style="color:${d.listItemCount > 0 ? "#22c55e" : "#ef4444"}">${d.listItemCount}</b><br>
+        Scaffold items: <b style="color:${d.scaffoldCount > 0 ? "#22c55e" : "#ef4444"}">${d.scaffoldCount}</b><br><br>
         <b style="color:#94a3b8">Sample HTML:</b><br>
         <span style="color:#475569">${escHtml(d.sampleHTML)}</span>
       `;
     } catch (e) {
-      debugOut.textContent = "Could not inspect page: " + e.message + "\n\nTry refreshing the LinkedIn page first.";
+      debugOut.textContent =
+        "Could not inspect page: " +
+        e.message +
+        "\n\nTry refreshing the LinkedIn page first.";
     }
   });
 }

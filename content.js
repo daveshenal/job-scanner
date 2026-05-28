@@ -25,10 +25,19 @@ function debugPage() {
   return {
     url: location.href,
     bodyClasses: document.body.className.slice(0, 200),
-    jobCardCount: document.querySelectorAll('[data-job-id], [data-occludable-job-id], .job-card-container').length,
-    listItemCount: document.querySelectorAll('.jobs-search-results__list-item').length,
-    scaffoldCount: document.querySelectorAll('.scaffold-layout__list-item').length,
-    sampleHTML: document.querySelector('.jobs-search-results__list, .jobs-search-results-grid, [class*="jobs-search"]')?.innerHTML?.slice(0, 500) || "No job list found"
+    jobCardCount: document.querySelectorAll(
+      "[data-job-id], [data-occludable-job-id], .job-card-container",
+    ).length,
+    listItemCount: document.querySelectorAll(".jobs-search-results__list-item")
+      .length,
+    scaffoldCount: document.querySelectorAll(".scaffold-layout__list-item")
+      .length,
+    sampleHTML:
+      document
+        .querySelector(
+          '.jobs-search-results__list, .jobs-search-results-grid, [class*="jobs-search"]',
+        )
+        ?.innerHTML?.slice(0, 500) || "No job list found",
   };
 }
 
@@ -81,28 +90,31 @@ async function startScan(apiKey) {
       const debug = debugPage();
       showError(
         `No jobs found on this page.<br><br>` +
-        `<small style="color:#64748b">` +
-        `URL: ${debug.url.slice(0, 60)}<br>` +
-        `Job cards found: ${debug.jobCardCount}<br>` +
-        `List items: ${debug.listItemCount}<br>` +
-        `Scaffold items: ${debug.scaffoldCount}<br><br>` +
-        `Make sure you're on a LinkedIn job search results page and jobs are visible.</small>`
+          `<small style="color:#64748b">` +
+          `URL: ${debug.url.slice(0, 60)}<br>` +
+          `Job cards found: ${debug.jobCardCount}<br>` +
+          `List items: ${debug.listItemCount}<br>` +
+          `Scaffold items: ${debug.scaffoldCount}<br><br>` +
+          `Make sure you're on a LinkedIn job search results page and jobs are visible.</small>`,
       );
       isScanning = false;
       return;
     }
 
-    showScanning(`Found ${jobs.length} jobs — asking Claude AI...`);
+    showScanning(`Found ${jobs.length} jobs - asking Claude AI...`);
 
     // Add a timeout so it never hangs forever
     const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Request timed out after 30 seconds")), 30000)
+      setTimeout(
+        () => reject(new Error("Request timed out after 30 seconds")),
+        30000,
+      ),
     );
 
     const responsePromise = chrome.runtime.sendMessage({
       type: "ANALYZE_JOBS",
       jobs,
-      apiKey
+      apiKey,
     });
 
     const response = await Promise.race([responsePromise, timeoutPromise]);
@@ -115,11 +127,10 @@ async function startScan(apiKey) {
 
     const enriched = response.data.map((analysis, i) => ({
       ...jobs[i],
-      ...analysis
+      ...analysis,
     }));
 
     showResults(enriched);
-
   } catch (err) {
     showError("Error: " + err.message);
   }
@@ -131,20 +142,23 @@ function collectJobs() {
   const jobs = [];
   const seen = new Set();
 
-  // Try multiple selector strategies — LinkedIn changes their DOM frequently
+  // Try multiple selector strategies - LinkedIn changes their DOM frequently
   const strategies = [
     // Strategy 1: data-job-id attribute (most reliable)
-    () => document.querySelectorAll('[data-job-id]'),
+    () => document.querySelectorAll("[data-job-id]"),
     // Strategy 2: occludable job id
-    () => document.querySelectorAll('[data-occludable-job-id]'),
+    () => document.querySelectorAll("[data-occludable-job-id]"),
     // Strategy 3: classic job card container
-    () => document.querySelectorAll('.job-card-container'),
+    () => document.querySelectorAll(".job-card-container"),
     // Strategy 4: search result list items
-    () => document.querySelectorAll('.jobs-search-results__list-item'),
+    () => document.querySelectorAll(".jobs-search-results__list-item"),
     // Strategy 5: scaffold layout list items (newer LinkedIn)
-    () => document.querySelectorAll('.scaffold-layout__list-item'),
+    () => document.querySelectorAll(".scaffold-layout__list-item"),
     // Strategy 6: any li inside the jobs list
-    () => document.querySelectorAll('.jobs-search-results__list li, [class*="jobs-search-results"] li'),
+    () =>
+      document.querySelectorAll(
+        '.jobs-search-results__list li, [class*="jobs-search-results"] li',
+      ),
   ];
 
   let cards = [];
@@ -158,34 +172,36 @@ function collectJobs() {
 
   for (const card of cards) {
     try {
-      // Title — try many selectors
+      // Title - try many selectors
       const titleEl =
-        card.querySelector('.job-card-list__title--link') ||
-        card.querySelector('.job-card-list__title') ||
+        card.querySelector(".job-card-list__title--link") ||
+        card.querySelector(".job-card-list__title") ||
         card.querySelector('[class*="job-card-list__title"]') ||
         card.querySelector('a[class*="job-card"]') ||
-        card.querySelector('strong') ||
+        card.querySelector("strong") ||
         card.querySelector('a[href*="/jobs/view/"]');
 
       // Company
       const companyEl =
-        card.querySelector('.job-card-container__primary-description') ||
-        card.querySelector('.job-card-container__company-name') ||
+        card.querySelector(".job-card-container__primary-description") ||
+        card.querySelector(".job-card-container__company-name") ||
         card.querySelector('[class*="company-name"]') ||
-        card.querySelector('.artdeco-entity-lockup__subtitle') ||
+        card.querySelector(".artdeco-entity-lockup__subtitle") ||
         card.querySelector('[class*="subtitle"]');
 
       // Location
       const locationEl =
-        card.querySelector('.job-card-container__metadata-item') ||
+        card.querySelector(".job-card-container__metadata-item") ||
         card.querySelector('[class*="metadata"]') ||
-        card.querySelector('.artdeco-entity-lockup__caption') ||
+        card.querySelector(".artdeco-entity-lockup__caption") ||
         card.querySelector('[class*="location"]') ||
         card.querySelector('[class*="caption"]');
 
       const title = titleEl?.innerText?.trim() || titleEl?.textContent?.trim();
-      const company = companyEl?.innerText?.trim() || companyEl?.textContent?.trim();
-      const location = locationEl?.innerText?.trim() || locationEl?.textContent?.trim();
+      const company =
+        companyEl?.innerText?.trim() || companyEl?.textContent?.trim();
+      const location =
+        locationEl?.innerText?.trim() || locationEl?.textContent?.trim();
 
       // Skip if no meaningful data or duplicate
       if (!title && !company) continue;
@@ -197,9 +213,8 @@ function collectJobs() {
         title: title || "Unknown Title",
         company: company || "Unknown Company",
         location: location || "Unknown Location",
-        description: ""
+        description: "",
       });
-
     } catch (e) {
       // Skip bad cards silently
     }
@@ -207,10 +222,10 @@ function collectJobs() {
 
   // Also grab the currently visible job description panel
   const descEl =
-    document.querySelector('.jobs-description__content') ||
-    document.querySelector('.jobs-description-content') ||
+    document.querySelector(".jobs-description__content") ||
+    document.querySelector(".jobs-description-content") ||
     document.querySelector('[class*="jobs-description"]') ||
-    document.querySelector('.job-view-layout');
+    document.querySelector(".job-view-layout");
 
   if (descEl && jobs.length > 0) {
     jobs[0].description = descEl.innerText.trim().slice(0, 3000);
@@ -253,17 +268,17 @@ function showResults(jobs) {
   if (!body) return;
 
   const seniorityColor = {
-    "Junior": "#22c55e",
-    "Mid": "#3b82f6",
-    "Senior": "#f59e0b",
-    "Lead": "#ef4444",
-    "Principal": "#8b5cf6"
+    Junior: "#22c55e",
+    Mid: "#3b82f6",
+    Senior: "#f59e0b",
+    Lead: "#ef4444",
+    Principal: "#8b5cf6",
   };
 
   const jobTypeIcon = {
-    "Remote": "🌐",
-    "Hybrid": "🏠",
-    "On-site": "🏢"
+    Remote: "🌐",
+    Hybrid: "🏠",
+    "On-site": "🏢",
   };
 
   body.innerHTML = `
@@ -272,7 +287,9 @@ function showResults(jobs) {
       <button class="ljs-rescan-btn" id="ljs-rescan">↻ Rescan</button>
     </div>
     <div class="ljs-jobs-list">
-      ${jobs.map((job, i) => `
+      ${jobs
+        .map(
+          (job, i) => `
         <div class="ljs-job-card" data-index="${i}">
           <div class="ljs-job-header">
             <div class="ljs-job-title-row">
@@ -288,18 +305,28 @@ function showResults(jobs) {
             </div>
           </div>
           <div class="ljs-job-summary">${escHtml(job.summary || "")}</div>
-          ${job.keySkills?.length ? `
+          ${
+            job.keySkills?.length
+              ? `
             <div class="ljs-skills">
-              ${job.keySkills.map(s => `<span class="ljs-skill">${escHtml(s)}</span>`).join("")}
+              ${job.keySkills.map((s) => `<span class="ljs-skill">${escHtml(s)}</span>`).join("")}
             </div>
-          ` : ""}
-          ${job.highlights?.length ? `
+          `
+              : ""
+          }
+          ${
+            job.highlights?.length
+              ? `
             <div class="ljs-highlights">
-              ${job.highlights.map(h => `<div class="ljs-highlight">✦ ${escHtml(h)}</div>`).join("")}
+              ${job.highlights.map((h) => `<div class="ljs-highlight">✦ ${escHtml(h)}</div>`).join("")}
             </div>
-          ` : ""}
+          `
+              : ""
+          }
         </div>
-      `).join("")}
+      `,
+        )
+        .join("")}
     </div>
   `;
 

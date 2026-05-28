@@ -1,4 +1,4 @@
-# ⚡ Job Scanner - Chrome Extension
+# ⚡ LinkedIn Job Scanner - Chrome Extension
 
 Scan and summarize LinkedIn job listings in bulk using Claude AI. No more clicking into each job one by one!
 
