@@ -11,8 +11,8 @@
   z-index: 99999;
   display: flex;
   flex-direction: column;
-  font-family: 'DM Sans', 'Segoe UI', sans-serif;
-  box-shadow: -8px 0 40px rgba(0,0,0,0.4);
+  font-family: "DM Sans", "Segoe UI", sans-serif;
+  box-shadow: -8px 0 40px rgba(0, 0, 0, 0.4);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -100,7 +100,9 @@
 }
 
 @keyframes ljs-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .ljs-error {
