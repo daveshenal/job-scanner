@@ -1,4 +1,6 @@
 // content.js - Runs on LinkedIn jobs pages
+// Strategy: LinkedIn uses hashed/randomized class names that change every deploy.
+// So we scrape by DOM structure and text content patterns instead.
 
 let sidebar = null;
 let isScanning = false;
@@ -8,48 +10,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     startScan(message.apiKey);
     sendResponse({ success: true });
   }
-  if (message.type === "GET_STATUS") {
-    sendResponse({ isScanning, hasSidebar: !!sidebar });
-  }
   if (message.type === "TOGGLE_SIDEBAR") {
     toggleSidebar();
     sendResponse({ success: true });
   }
   if (message.type === "DEBUG_PAGE") {
-    sendResponse({ html: debugPage() });
+    sendResponse({ info: debugPage() });
   }
 });
 
 function debugPage() {
-  // Return useful debug info about what's on the page
+  const jobs = collectJobs();
   return {
-    url: location.href,
-    bodyClasses: document.body.className.slice(0, 200),
-    jobCardCount: document.querySelectorAll(
-      "[data-job-id], [data-occludable-job-id], .job-card-container",
-    ).length,
-    listItemCount: document.querySelectorAll(".jobs-search-results__list-item")
-      .length,
-    scaffoldCount: document.querySelectorAll(".scaffold-layout__list-item")
-      .length,
-    sampleHTML:
-      document
-        .querySelector(
-          '.jobs-search-results__list, .jobs-search-results-grid, [class*="jobs-search"]',
-        )
-        ?.innerHTML?.slice(0, 500) || "No job list found",
+    jobsFound: jobs.length,
+    firstJob: jobs[0] || null,
+    totalLiCount: document.querySelectorAll("li").length,
+    visibleText: document.body.innerText.slice(0, 500),
   };
 }
 
 function toggleSidebar() {
-  if (sidebar) {
-    sidebar.classList.toggle("ljs-hidden");
-  }
+  if (sidebar) sidebar.classList.toggle("ljs-hidden");
 }
 
 function createSidebar() {
   if (sidebar) return;
-
   sidebar = document.createElement("div");
   sidebar.id = "ljs-sidebar";
   sidebar.innerHTML = `
@@ -67,7 +52,6 @@ function createSidebar() {
       </div>
     </div>
   `;
-
   document.body.appendChild(sidebar);
   document.getElementById("ljs-close-btn").addEventListener("click", () => {
     sidebar.classList.add("ljs-hidden");
@@ -86,16 +70,9 @@ async function startScan(apiKey) {
     const jobs = collectJobs();
 
     if (jobs.length === 0) {
-      // Show debug info to help diagnose
-      const debug = debugPage();
       showError(
-        `No jobs found on this page.<br><br>` +
-          `<small style="color:#64748b">` +
-          `URL: ${debug.url.slice(0, 60)}<br>` +
-          `Job cards found: ${debug.jobCardCount}<br>` +
-          `List items: ${debug.listItemCount}<br>` +
-          `Scaffold items: ${debug.scaffoldCount}<br><br>` +
-          `Make sure you're on a LinkedIn job search results page and jobs are visible.</small>`,
+        `No jobs found.<br><br>` +
+          `<small style="color:#64748b">Make sure job listings are visible on the left panel, then try again.</small>`,
       );
       isScanning = false;
       return;
@@ -103,21 +80,14 @@ async function startScan(apiKey) {
 
     showScanning(`Found ${jobs.length} jobs - asking Claude AI...`);
 
-    // Add a timeout so it never hangs forever
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(
-        () => reject(new Error("Request timed out after 30 seconds")),
-        30000,
-      ),
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Timed out after 45s")), 45000),
     );
 
-    const responsePromise = chrome.runtime.sendMessage({
-      type: "ANALYZE_JOBS",
-      jobs,
-      apiKey,
-    });
-
-    const response = await Promise.race([responsePromise, timeoutPromise]);
+    const response = await Promise.race([
+      chrome.runtime.sendMessage({ type: "ANALYZE_JOBS", jobs, apiKey }),
+      timeout,
+    ]);
 
     if (!response.success) {
       showError("Claude API error: " + response.error);
@@ -125,12 +95,9 @@ async function startScan(apiKey) {
       return;
     }
 
-    const enriched = response.data.map((analysis, i) => ({
-      ...jobs[i],
-      ...analysis,
-    }));
-
-    showResults(enriched);
+    showResults(
+      response.data.map((analysis, i) => ({ ...jobs[i], ...analysis })),
+    );
   } catch (err) {
     showError("Error: " + err.message);
   }
@@ -142,93 +109,133 @@ function collectJobs() {
   const jobs = [];
   const seen = new Set();
 
-  // Try multiple selector strategies - LinkedIn changes their DOM frequently
-  const strategies = [
-    // Strategy 1: data-job-id attribute (most reliable)
-    () => document.querySelectorAll("[data-job-id]"),
-    // Strategy 2: occludable job id
-    () => document.querySelectorAll("[data-occludable-job-id]"),
-    // Strategy 3: classic job card container
-    () => document.querySelectorAll(".job-card-container"),
-    // Strategy 4: search result list items
-    () => document.querySelectorAll(".jobs-search-results__list-item"),
-    // Strategy 5: scaffold layout list items (newer LinkedIn)
-    () => document.querySelectorAll(".scaffold-layout__list-item"),
-    // Strategy 6: any li inside the jobs list
-    () =>
-      document.querySelectorAll(
-        '.jobs-search-results__list li, [class*="jobs-search-results"] li',
-      ),
-  ];
+  // LinkedIn now uses hashed class names - so we find job cards by their
+  // structural role: each job card is a <li> that contains:
+  //   1. A visible job title span (the first meaningful text)
+  //   2. A company name
+  //   3. A location
+  // We find the <ul> whose <li> children look like job cards.
 
-  let cards = [];
-  for (const strategy of strategies) {
-    const found = strategy();
-    if (found.length > 0) {
-      cards = Array.from(found);
-      break;
-    }
-  }
+  // Find all <li> elements that look like job cards
+  const allLi = Array.from(document.querySelectorAll("li"));
 
-  for (const card of cards) {
+  for (const li of allLi) {
     try {
-      // Title - try many selectors
-      const titleEl =
-        card.querySelector(".job-card-list__title--link") ||
-        card.querySelector(".job-card-list__title") ||
-        card.querySelector('[class*="job-card-list__title"]') ||
-        card.querySelector('a[class*="job-card"]') ||
-        card.querySelector("strong") ||
-        card.querySelector('a[href*="/jobs/view/"]');
+      // Each job card li should have a role="button" or similar interactive div inside
+      // and contain at least 3 distinct text nodes (title, company, location)
+      const paragraphs = Array.from(li.querySelectorAll("p, span"))
+        .map((el) => el.innerText?.trim())
+        .filter((t) => t && t.length > 1 && t.length < 200);
 
-      // Company
-      const companyEl =
-        card.querySelector(".job-card-container__primary-description") ||
-        card.querySelector(".job-card-container__company-name") ||
-        card.querySelector('[class*="company-name"]') ||
-        card.querySelector(".artdeco-entity-lockup__subtitle") ||
-        card.querySelector('[class*="subtitle"]');
+      if (paragraphs.length < 2) continue;
 
-      // Location
-      const locationEl =
-        card.querySelector(".job-card-container__metadata-item") ||
-        card.querySelector('[class*="metadata"]') ||
-        card.querySelector(".artdeco-entity-lockup__caption") ||
-        card.querySelector('[class*="location"]') ||
-        card.querySelector('[class*="caption"]');
+      // Skip nav items, footers, etc.
+      if (li.closest("nav") || li.closest("footer") || li.closest("header"))
+        continue;
 
-      const title = titleEl?.innerText?.trim() || titleEl?.textContent?.trim();
-      const company =
-        companyEl?.innerText?.trim() || companyEl?.textContent?.trim();
-      const location =
-        locationEl?.innerText?.trim() || locationEl?.textContent?.trim();
+      // The title span uses _794ff500 class in current LinkedIn build
+      // but we also fallback to first meaningful <p> text
+      const titleSpan = li.querySelector("span._794ff500");
+      const title = titleSpan ? titleSpan.innerText.trim() : paragraphs[0];
 
-      // Skip if no meaningful data or duplicate
-      if (!title && !company) continue;
+      if (!title || title.length < 3) continue;
+
+      // Skip obvious non-job items
+      const skipWords = [
+        "home",
+        "jobs",
+        "messaging",
+        "notifications",
+        "network",
+        "post a job",
+        "sign in",
+        "join now",
+      ];
+      if (skipWords.some((w) => title.toLowerCase() === w)) continue;
+
+      // Company: usually the paragraph right after the title
+      // Location: usually contains city/country and "(Remote)" or "(Hybrid)"
+      let company = "";
+      let location = "";
+      let salary = "";
+
+      // Find salary (contains $ or /yr or /hr)
+      const salaryEl = li.querySelector("span, p");
+      const allTexts = Array.from(li.querySelectorAll("p, span"))
+        .map((el) => el.innerText?.trim())
+        .filter(Boolean);
+
+      for (const text of allTexts) {
+        if (
+          !salary &&
+          (text.includes("$") || text.includes("/yr") || text.includes("/hr"))
+        ) {
+          salary = text;
+        }
+        if (
+          !company &&
+          text !== title &&
+          text.length > 1 &&
+          text.length < 100 &&
+          !text.includes("$") &&
+          !text.match(/\d+ (month|week|day|hour)s? ago/i) &&
+          !text.includes("Easy Apply") &&
+          !text.includes("Apply") &&
+          company === ""
+        ) {
+          company = text;
+        }
+        if (
+          !location &&
+          (text.includes("Remote") ||
+            text.includes("Hybrid") ||
+            text.includes("On-site") ||
+            text.match(/[A-Z][a-z]+,\s[A-Z]{2}/) || // City, ST
+            text.match(/[A-Z][a-z]+,\s[A-Z][a-z]+/)) // City, Country
+        ) {
+          location = text;
+        }
+      }
+
       const key = `${title}|${company}`;
       if (seen.has(key)) continue;
       seen.add(key);
 
-      jobs.push({
-        title: title || "Unknown Title",
-        company: company || "Unknown Company",
-        location: location || "Unknown Location",
-        description: "",
-      });
+      // Only add if it looks like a real job (has title + at least company or location)
+      if (title && (company || location)) {
+        jobs.push({
+          title: title.slice(0, 120),
+          company: company.slice(0, 100),
+          location: location.slice(0, 100),
+          salary: salary.slice(0, 50),
+          description: "",
+        });
+      }
     } catch (e) {
-      // Skip bad cards silently
+      /* skip */
     }
   }
 
-  // Also grab the currently visible job description panel
-  const descEl =
-    document.querySelector(".jobs-description__content") ||
-    document.querySelector(".jobs-description-content") ||
-    document.querySelector('[class*="jobs-description"]') ||
-    document.querySelector(".job-view-layout");
+  // Grab the currently open job description panel
+  // Look for the largest text block on the right side of the page
+  const descCandidates = Array.from(
+    document.querySelectorAll("div, section, article"),
+  )
+    .filter((el) => {
+      const text = el.innerText?.trim() || "";
+      return (
+        text.length > 300 &&
+        (text.toLowerCase().includes("responsibilities") ||
+          text.toLowerCase().includes("requirements") ||
+          text.toLowerCase().includes("qualifications") ||
+          text.toLowerCase().includes("about the role") ||
+          text.toLowerCase().includes("what you"))
+      );
+    })
+    .sort((a, b) => b.innerText.length - a.innerText.length);
 
-  if (descEl && jobs.length > 0) {
-    jobs[0].description = descEl.innerText.trim().slice(0, 3000);
+  if (descCandidates.length > 0 && jobs.length > 0) {
+    jobs[0].description = descCandidates[0].innerText.trim().slice(0, 3000);
   }
 
   return jobs;
@@ -274,12 +281,7 @@ function showResults(jobs) {
     Lead: "#ef4444",
     Principal: "#8b5cf6",
   };
-
-  const jobTypeIcon = {
-    Remote: "🌐",
-    Hybrid: "🏠",
-    "On-site": "🏢",
-  };
+  const jobTypeIcon = { Remote: "🌐", Hybrid: "🏠", "On-site": "🏢" };
 
   body.innerHTML = `
     <div class="ljs-results-header">
@@ -295,34 +297,19 @@ function showResults(jobs) {
             <div class="ljs-job-title-row">
               <span class="ljs-job-index">${i + 1}</span>
               <div>
-                <div class="ljs-job-title">${escHtml(job.title || "Unknown Title")}</div>
-                <div class="ljs-job-company">${escHtml(job.company || "")} · ${escHtml(job.location || "")}</div>
+                <div class="ljs-job-title">${esc(job.title)}</div>
+                <div class="ljs-job-company">${esc(job.company)} ${job.location ? "· " + esc(job.location) : ""}</div>
+                ${job.salary ? `<div class="ljs-salary">💰 ${esc(job.salary)}</div>` : ""}
               </div>
             </div>
             <div class="ljs-badges">
               ${job.seniorityLevel ? `<span class="ljs-badge" style="background:${seniorityColor[job.seniorityLevel] || "#6b7280"}20;color:${seniorityColor[job.seniorityLevel] || "#6b7280"}">${job.seniorityLevel}</span>` : ""}
-              ${job.jobType ? `<span class="ljs-badge ljs-badge-type">${jobTypeIcon[job.jobType] || ""} ${escHtml(job.jobType)}</span>` : ""}
+              ${job.jobType ? `<span class="ljs-badge ljs-badge-type">${jobTypeIcon[job.jobType] || ""} ${esc(job.jobType)}</span>` : ""}
             </div>
           </div>
-          <div class="ljs-job-summary">${escHtml(job.summary || "")}</div>
-          ${
-            job.keySkills?.length
-              ? `
-            <div class="ljs-skills">
-              ${job.keySkills.map((s) => `<span class="ljs-skill">${escHtml(s)}</span>`).join("")}
-            </div>
-          `
-              : ""
-          }
-          ${
-            job.highlights?.length
-              ? `
-            <div class="ljs-highlights">
-              ${job.highlights.map((h) => `<div class="ljs-highlight">✦ ${escHtml(h)}</div>`).join("")}
-            </div>
-          `
-              : ""
-          }
+          ${job.summary ? `<div class="ljs-job-summary">${esc(job.summary)}</div>` : ""}
+          ${job.keySkills?.length ? `<div class="ljs-skills">${job.keySkills.map((s) => `<span class="ljs-skill">${esc(s)}</span>`).join("")}</div>` : ""}
+          ${job.highlights?.length ? `<div class="ljs-highlights">${job.highlights.map((h) => `<div class="ljs-highlight">✦ ${esc(h)}</div>`).join("")}</div>` : ""}
         </div>
       `,
         )
@@ -338,8 +325,8 @@ function showResults(jobs) {
   });
 }
 
-function escHtml(str) {
-  return String(str)
+function esc(str) {
+  return String(str || "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
