@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkedIn Job Scanner</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 320px;
+      background: #0a0a0f;
+      color: #e2e8f0;
+      font-family: 'DM Sans', 'Segoe UI', sans-serif;
+      min-height: 200px;
+    }
+
+    .header {
+      background: #0d0d14;
+      border-bottom: 1px solid #1e1e2e;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+
+    .header-text h1 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #e2e8f0;
+    }
+
+    .header-text p {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 1px;
+    }
+
+    .body {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .api-section label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .api-input-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    input[type="password"], input[type="text"] {
+      flex: 1;
+      background: #0d0d14;
+      border: 1px solid #1e1e2e;
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 12px;
+      color: #e2e8f0;
+      outline: none;
+      transition: border-color 0.15s;
+      font-family: inherit;
+    }
+
+    input[type="password"]:focus, input[type="text"]:focus {
+      border-color: #6366f1;
+    }
+
+    input::placeholder {
+      color: #334155;
+    }
+
+    .save-btn {
+      background: #1e1e2e;
+      border: none;
+      color: #6366f1;
+      padding: 9px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .save-btn:hover {
+      background: #6366f120;
+    }
+
+    .api-hint {
+      font-size: 10px;
+      color: #334155;
+      margin-top: 6px;
+    }
+
+    .api-hint a {
+      color: #6366f1;
+      text-decoration: none;
+    }
+
+    .divider {
+      height: 1px;
+      background: #1e1e2e;
+    }
+
+    .status-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #334155;
+    }
+
+    .status-dot.active {
+      background: #22c55e;
+      box-shadow: 0 0 6px #22c55e80;
+    }
+
+    .status-dot.warning {
+      background: #f59e0b;
+    }
+
+    .scan-btn {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      border: none;
+      color: white;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: 0.3px;
+      width: 100%;
+    }
+
+    .scan-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px #6366f140;
+    }
+
+    .scan-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .toggle-btn {
+      background: #0d0d14;
+      border: 1px solid #1e1e2e;
+      color: #94a3b8;
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      width: 100%;
+    }
+
+    .toggle-btn:hover {
+      border-color: #6366f140;
+      color: #e2e8f0;
+    }
+
+    .not-linkedin {
+      text-align: center;
+      padding: 20px;
+      color: #64748b;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .not-linkedin .icon {
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+
+    .not-linkedin a {
+      color: #6366f1;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .saved-indicator {
+      font-size: 11px;
+      color: #22c55e;
+      display: none;
+    }
+
+    .footer {
+      padding: 12px 20px;
+      border-top: 1px solid #1e1e2e;
+      font-size: 10px;
+      color: #334155;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">⚡</div>
+    <div class="header-text">
+      <h1>Job Scanner</h1>
+      <p>Powered by Claude AI</p>
+    </div>
+  </div>
+
+  <div id="main-content" class="body">
+    <!-- Dynamically filled -->
+  </div>
+
+  <div class="footer">LinkedIn Job Scanner · Claude AI</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
