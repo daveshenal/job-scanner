@@ -24,8 +24,8 @@ function debugPage() {
   return {
     jobsFound: jobs.length,
     firstJob: jobs[0] || null,
-    totalLiCount: document.querySelectorAll('li').length,
-    visibleText: document.body.innerText.slice(0, 500)
+    totalLiCount: document.querySelectorAll("li").length,
+    visibleText: document.body.innerText.slice(0, 500),
   };
 }
 
@@ -72,21 +72,21 @@ async function startScan(apiKey) {
     if (jobs.length === 0) {
       showError(
         `No jobs found.<br><br>` +
-        `<small style="color:#64748b">Make sure job listings are visible on the left panel, then try again.</small>`
+          `<small style="color:#64748b">Make sure job listings are visible on the left panel, then try again.</small>`,
       );
       isScanning = false;
       return;
     }
 
-    showScanning(`Found ${jobs.length} jobs — asking Claude AI...`);
+    showScanning(`Found ${jobs.length} jobs - asking Claude AI...`);
 
     const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Timed out after 45s")), 45000)
+      setTimeout(() => reject(new Error("Timed out after 45s")), 45000),
     );
 
     const response = await Promise.race([
       chrome.runtime.sendMessage({ type: "ANALYZE_JOBS", jobs, apiKey }),
-      timeout
+      timeout,
     ]);
 
     if (!response.success) {
@@ -95,8 +95,9 @@ async function startScan(apiKey) {
       return;
     }
 
-    showResults(response.data.map((analysis, i) => ({ ...jobs[i], ...analysis })));
-
+    showResults(
+      response.data.map((analysis, i) => ({ ...jobs[i], ...analysis })),
+    );
   } catch (err) {
     showError("Error: " + err.message);
   }
@@ -108,7 +109,7 @@ function collectJobs() {
   const jobs = [];
   const seen = new Set();
 
-  // LinkedIn now uses hashed class names — so we find job cards by their
+  // LinkedIn now uses hashed class names - so we find job cards by their
   // structural role: each job card is a <li> that contains:
   //   1. A visible job title span (the first meaningful text)
   //   2. A company name
@@ -116,60 +117,82 @@ function collectJobs() {
   // We find the <ul> whose <li> children look like job cards.
 
   // Find all <li> elements that look like job cards
-  const allLi = Array.from(document.querySelectorAll('li'));
+  const allLi = Array.from(document.querySelectorAll("li"));
 
   for (const li of allLi) {
     try {
       // Each job card li should have a role="button" or similar interactive div inside
       // and contain at least 3 distinct text nodes (title, company, location)
-      const paragraphs = Array.from(li.querySelectorAll('p, span'))
-        .map(el => el.innerText?.trim())
-        .filter(t => t && t.length > 1 && t.length < 200);
+      const paragraphs = Array.from(li.querySelectorAll("p, span"))
+        .map((el) => el.innerText?.trim())
+        .filter((t) => t && t.length > 1 && t.length < 200);
 
       if (paragraphs.length < 2) continue;
 
       // Skip nav items, footers, etc.
-      if (li.closest('nav') || li.closest('footer') || li.closest('header')) continue;
+      if (li.closest("nav") || li.closest("footer") || li.closest("header"))
+        continue;
 
       // The title span uses _794ff500 class in current LinkedIn build
       // but we also fallback to first meaningful <p> text
-      const titleSpan = li.querySelector('span._794ff500');
-      const title = titleSpan
-        ? titleSpan.innerText.trim()
-        : paragraphs[0];
+      const titleSpan = li.querySelector("span._794ff500");
+      const title = titleSpan ? titleSpan.innerText.trim() : paragraphs[0];
 
       if (!title || title.length < 3) continue;
 
       // Skip obvious non-job items
-      const skipWords = ['home', 'jobs', 'messaging', 'notifications', 'network', 'post a job', 'sign in', 'join now'];
-      if (skipWords.some(w => title.toLowerCase() === w)) continue;
+      const skipWords = [
+        "home",
+        "jobs",
+        "messaging",
+        "notifications",
+        "network",
+        "post a job",
+        "sign in",
+        "join now",
+      ];
+      if (skipWords.some((w) => title.toLowerCase() === w)) continue;
 
       // Company: usually the paragraph right after the title
       // Location: usually contains city/country and "(Remote)" or "(Hybrid)"
-      let company = '';
-      let location = '';
-      let salary = '';
+      let company = "";
+      let location = "";
+      let salary = "";
 
       // Find salary (contains $ or /yr or /hr)
-      const salaryEl = li.querySelector('span, p');
-      const allTexts = Array.from(li.querySelectorAll('p, span'))
-        .map(el => el.innerText?.trim())
+      const salaryEl = li.querySelector("span, p");
+      const allTexts = Array.from(li.querySelectorAll("p, span"))
+        .map((el) => el.innerText?.trim())
         .filter(Boolean);
 
       for (const text of allTexts) {
-        if (!salary && (text.includes('$') || text.includes('/yr') || text.includes('/hr'))) {
+        if (
+          !salary &&
+          (text.includes("$") || text.includes("/yr") || text.includes("/hr"))
+        ) {
           salary = text;
         }
-        if (!company && text !== title && text.length > 1 && text.length < 100 &&
-            !text.includes('$') && !text.match(/\d+ (month|week|day|hour)s? ago/i) &&
-            !text.includes('Easy Apply') && !text.includes('Apply') && company === '') {
+        if (
+          !company &&
+          text !== title &&
+          text.length > 1 &&
+          text.length < 100 &&
+          !text.includes("$") &&
+          !text.match(/\d+ (month|week|day|hour)s? ago/i) &&
+          !text.includes("Easy Apply") &&
+          !text.includes("Apply") &&
+          company === ""
+        ) {
           company = text;
         }
-        if (!location && (
-          text.includes('Remote') || text.includes('Hybrid') || text.includes('On-site') ||
-          text.match(/[A-Z][a-z]+,\s[A-Z]{2}/) || // City, ST
-          text.match(/[A-Z][a-z]+,\s[A-Z][a-z]+/)  // City, Country
-        )) {
+        if (
+          !location &&
+          (text.includes("Remote") ||
+            text.includes("Hybrid") ||
+            text.includes("On-site") ||
+            text.match(/[A-Z][a-z]+,\s[A-Z]{2}/) || // City, ST
+            text.match(/[A-Z][a-z]+,\s[A-Z][a-z]+/)) // City, Country
+        ) {
           location = text;
         }
       }
@@ -185,24 +208,29 @@ function collectJobs() {
           company: company.slice(0, 100),
           location: location.slice(0, 100),
           salary: salary.slice(0, 50),
-          description: ""
+          description: "",
         });
       }
-
-    } catch (e) { /* skip */ }
+    } catch (e) {
+      /* skip */
+    }
   }
 
   // Grab the currently open job description panel
   // Look for the largest text block on the right side of the page
-  const descCandidates = Array.from(document.querySelectorAll('div, section, article'))
-    .filter(el => {
-      const text = el.innerText?.trim() || '';
-      return text.length > 300 &&
-        (text.toLowerCase().includes('responsibilities') ||
-         text.toLowerCase().includes('requirements') ||
-         text.toLowerCase().includes('qualifications') ||
-         text.toLowerCase().includes('about the role') ||
-         text.toLowerCase().includes('what you'));
+  const descCandidates = Array.from(
+    document.querySelectorAll("div, section, article"),
+  )
+    .filter((el) => {
+      const text = el.innerText?.trim() || "";
+      return (
+        text.length > 300 &&
+        (text.toLowerCase().includes("responsibilities") ||
+          text.toLowerCase().includes("requirements") ||
+          text.toLowerCase().includes("qualifications") ||
+          text.toLowerCase().includes("about the role") ||
+          text.toLowerCase().includes("what you"))
+      );
     })
     .sort((a, b) => b.innerText.length - a.innerText.length);
 
@@ -247,10 +275,13 @@ function showResults(jobs) {
   if (!body) return;
 
   const seniorityColor = {
-    "Junior": "#22c55e", "Mid": "#3b82f6",
-    "Senior": "#f59e0b", "Lead": "#ef4444", "Principal": "#8b5cf6"
+    Junior: "#22c55e",
+    Mid: "#3b82f6",
+    Senior: "#f59e0b",
+    Lead: "#ef4444",
+    Principal: "#8b5cf6",
   };
-  const jobTypeIcon = { "Remote": "🌐", "Hybrid": "🏠", "On-site": "🏢" };
+  const jobTypeIcon = { Remote: "🌐", Hybrid: "🏠", "On-site": "🏢" };
 
   body.innerHTML = `
     <div class="ljs-results-header">
@@ -258,27 +289,31 @@ function showResults(jobs) {
       <button class="ljs-rescan-btn" id="ljs-rescan">↻ Rescan</button>
     </div>
     <div class="ljs-jobs-list">
-      ${jobs.map((job, i) => `
+      ${jobs
+        .map(
+          (job, i) => `
         <div class="ljs-job-card" data-index="${i}">
           <div class="ljs-job-header">
             <div class="ljs-job-title-row">
               <span class="ljs-job-index">${i + 1}</span>
               <div>
                 <div class="ljs-job-title">${esc(job.title)}</div>
-                <div class="ljs-job-company">${esc(job.company)} ${job.location ? '· ' + esc(job.location) : ''}</div>
-                ${job.salary ? `<div class="ljs-salary">💰 ${esc(job.salary)}</div>` : ''}
+                <div class="ljs-job-company">${esc(job.company)} ${job.location ? "· " + esc(job.location) : ""}</div>
+                ${job.salary ? `<div class="ljs-salary">💰 ${esc(job.salary)}</div>` : ""}
               </div>
             </div>
             <div class="ljs-badges">
-              ${job.seniorityLevel ? `<span class="ljs-badge" style="background:${seniorityColor[job.seniorityLevel]||'#6b7280'}20;color:${seniorityColor[job.seniorityLevel]||'#6b7280'}">${job.seniorityLevel}</span>` : ''}
-              ${job.jobType ? `<span class="ljs-badge ljs-badge-type">${jobTypeIcon[job.jobType]||''} ${esc(job.jobType)}</span>` : ''}
+              ${job.seniorityLevel ? `<span class="ljs-badge" style="background:${seniorityColor[job.seniorityLevel] || "#6b7280"}20;color:${seniorityColor[job.seniorityLevel] || "#6b7280"}">${job.seniorityLevel}</span>` : ""}
+              ${job.jobType ? `<span class="ljs-badge ljs-badge-type">${jobTypeIcon[job.jobType] || ""} ${esc(job.jobType)}</span>` : ""}
             </div>
           </div>
-          ${job.summary ? `<div class="ljs-job-summary">${esc(job.summary)}</div>` : ''}
-          ${job.keySkills?.length ? `<div class="ljs-skills">${job.keySkills.map(s=>`<span class="ljs-skill">${esc(s)}</span>`).join('')}</div>` : ''}
-          ${job.highlights?.length ? `<div class="ljs-highlights">${job.highlights.map(h=>`<div class="ljs-highlight">✦ ${esc(h)}</div>`).join('')}</div>` : ''}
+          ${job.summary ? `<div class="ljs-job-summary">${esc(job.summary)}</div>` : ""}
+          ${job.keySkills?.length ? `<div class="ljs-skills">${job.keySkills.map((s) => `<span class="ljs-skill">${esc(s)}</span>`).join("")}</div>` : ""}
+          ${job.highlights?.length ? `<div class="ljs-highlights">${job.highlights.map((h) => `<div class="ljs-highlight">✦ ${esc(h)}</div>`).join("")}</div>` : ""}
         </div>
-      `).join('')}
+      `,
+        )
+        .join("")}
     </div>
   `;
 
@@ -291,7 +326,9 @@ function showResults(jobs) {
 }
 
 function esc(str) {
-  return String(str || '')
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return String(str || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
