@@ -80,7 +80,7 @@ async function render() {
     const { apiKey: storedKey } = await chrome.storage.local.get("apiKey");
     if (!storedKey) return;
     document.getElementById("scan-btn").disabled = true;
-    document.getElementById("scan-btn").textContent = "Scanning...";
+    document.getElementById("scan-btn").innerHTML = "Scanning...";
     await chrome.tabs.sendMessage(tab.id, {
       type: "START_SCAN",
       apiKey: storedKey,
@@ -89,7 +89,9 @@ async function render() {
   });
 
   document.getElementById("toggle-btn").addEventListener("click", async () => {
-    await chrome.tabs.sendMessage(tab.id, { type: "TOGGLE_SIDEBAR" });
+    try {
+      await chrome.tabs.sendMessage(tab.id, { type: "TOGGLE_SIDEBAR" });
+    } catch (e) {}
     window.close();
   });
 
@@ -101,21 +103,14 @@ async function render() {
       const response = await chrome.tabs.sendMessage(tab.id, {
         type: "DEBUG_PAGE",
       });
-      const d = response.html;
+      const d = response.info;
       debugOut.innerHTML = `
-        <b style="color:#94a3b8">🔍 Page Debug</b><br>
-        <br>
-        <b style="color:#6366f1">Biggest list:</b> ${d.biggestListCount} items<br>
-        List class: <code>${escHtml(d.biggestListClass)}</code><br>
-        First child class: <code>${escHtml(d.biggestListFirstChildClass)}</code><br>
-        Sample text: <i>${escHtml(d.biggestListSample.slice(0, 150))}</i><br>
-        <br>
-        <b style="color:#6366f1">Job-related classes found:</b><br>
-        ${escHtml(d.jobRelatedClasses.slice(0, 300))}
+        <b style="color:#94a3b8">🔍 Page Debug</b><br><br>
+        <b style="color:#6366f1">Jobs found:</b> ${d.jobsFound}<br>
+        First job: <i>${escHtml(JSON.stringify(d.firstJob))}</i>
       `;
     } catch (e) {
-      debugOut.textContent =
-        "Error: " + e.message + "\n\nRefresh the LinkedIn page then try again.";
+      debugOut.textContent = "Refresh the LinkedIn page first, then try again.";
     }
   });
 }
