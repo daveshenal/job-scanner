@@ -38,7 +38,7 @@ async function analyzeJobsWithClaude(jobs, apiKey) {
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 2000,
+      max_tokens: 8000,
       messages: [
         {
           role: "user",
@@ -70,7 +70,8 @@ ${jobList}`,
 
   const data = await response.json();
   const text = data.content[0].text.trim();
-  return JSON.parse(text);
+  const cleaned = text.replace(/```json|```/g, "").trim();
+  return JSON.parse(cleaned);
 }
 
 async function analyzeSingleJob(job, apiKey) {
@@ -83,7 +84,7 @@ async function analyzeSingleJob(job, apiKey) {
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
+      max_tokens: 8000,
       messages: [
         {
           role: "user",
@@ -117,5 +118,6 @@ Description: ${job.description}`,
 
   const data = await response.json();
   const text = data.content[0].text.trim();
-  return JSON.parse(text);
+  const cleaned = text.replace(/```json|```/g, "").trim();
+  return JSON.parse(cleaned);
 }

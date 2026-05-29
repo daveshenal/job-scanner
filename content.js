@@ -62,7 +62,7 @@ async function startScan(apiKey) {
       return;
     }
 
-    showScanning(`Found ${jobs.length} jobs — asking Claude AI...`);
+    showScanning(`Found ${jobs.length} jobs - asking Claude AI...`);
 
     const timeout = new Promise((_, reject) =>
       setTimeout(() => reject(new Error("Timed out after 45s")), 45000),
