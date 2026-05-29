@@ -1,8 +1,21 @@
-# ⚡ LinkedIn Job Scanner - Chrome Extension
+# <img src="icons/icon48.png" width="28" valign="middle"> LinkedIn Job Scanner - Chrome Extension
 
 Scan and summarize LinkedIn job listings in bulk using Claude AI. No more clicking into each job one by one!
 
-![Job Scanner Sidebar](screenshots/working.png)
+## 📸 Screenshots
+
+<table>
+  <tr>
+    <td><b>Popup</b></td>
+    <td><b>Sidebar - Scanning</b></td>
+    <td><b>Sidebar - Results</b></td>
+  </tr>
+  <tr>
+    <td width="33%" valign="top"><img src="screenshots/popup.png" width="100%"></td>
+    <td width="33%" valign="top"><img src="screenshots/scanning.png" width="100%"></td>
+    <td width="33%" valign="top"><img src="screenshots/results.png" width="100%"></td>
+  </tr>
+</table>
 
 ---
 
@@ -12,13 +25,13 @@ Scan and summarize LinkedIn job listings in bulk using Claude AI. No more clicki
 2. Open Chrome and go to `chrome://extensions`
 3. Enable **Developer Mode** (top-right toggle)
 4. Click **"Load unpacked"** → select the unzipped folder
-5. The ⚡ icon appears in your Chrome toolbar
+5. The extension icon appears in your Chrome toolbar
 
 ---
 
 ## 🔑 Setup
 
-1. Click the ⚡ icon in your toolbar
+1. Click the extension icon in your toolbar
 2. Enter your **Anthropic API key** (get one at https://console.anthropic.com)
 3. Click **Save**
 
@@ -29,7 +42,7 @@ Scan and summarize LinkedIn job listings in bulk using Claude AI. No more clicki
 1. Go to `https://www.linkedin.com/jobs/`
 2. Search for any role (e.g. "Machine Learning Engineer")
 3. Wait for the job list to fully load on the left panel
-4. Click the ⚡ extension icon
+4. Click the extension icon
 5. Click **"Scan Jobs on This Page"**
 6. The sidebar slides in with AI summaries of all visible jobs!
 
@@ -149,15 +162,14 @@ Replace `_794ff500` and `_2f9e3fe1` with the new class names at the top of `coll
 
 ---
 
-## 🔮 Improvements!
+## 🔮 What's Next...
 
-- Copy original extraction (No LLM Calls)
+- Copy raw extraction without LLM calls
 - Resume matching & scoring
 - Auto-scan as you scroll (load more jobs)
-- Click a job card in the sidebar to jump to it on LinkedIn
+- Click a job card in sidebar to jump to it on LinkedIn
 - Export results to CSV / spreadsheet
 - Support for other job sites (Indeed, Glassdoor)
-- Save and compare jobs across sessions
 
 ---
 
