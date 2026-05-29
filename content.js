@@ -1,6 +1,9 @@
-// content.js - Runs on LinkedIn jobs pages
-// Strategy: LinkedIn uses hashed/randomized class names that change every deploy.
-// So we scrape by DOM structure and text content patterns instead.
+// content.js
+// Selectors discovered by live DOM inspection of LinkedIn (May 2026):
+// - Job titles: span._794ff500 (every 2nd one, odd are aria-hidden duplicates)
+// - Job card:   span._794ff500 -> closest('div._2f9e3fe1') -> .parentElement.parentElement
+// - Card lines: [0] title (may have "Selected, " prefix), [1] title again, [2] company, [3] location
+// - Description: first div whose innerText starts with "About the job"
 
 let sidebar = null;
 let isScanning = false;
@@ -14,20 +17,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     toggleSidebar();
     sendResponse({ success: true });
   }
-  if (message.type === "DEBUG_PAGE") {
-    sendResponse({ info: debugPage() });
-  }
 });
-
-function debugPage() {
-  const jobs = collectJobs();
-  return {
-    jobsFound: jobs.length,
-    firstJob: jobs[0] || null,
-    totalLiCount: document.querySelectorAll("li").length,
-    visibleText: document.body.innerText.slice(0, 500),
-  };
-}
 
 function toggleSidebar() {
   if (sidebar) sidebar.classList.toggle("ljs-hidden");
@@ -45,12 +35,7 @@ function createSidebar() {
       </div>
       <button class="ljs-close" id="ljs-close-btn">✕</button>
     </div>
-    <div class="ljs-body" id="ljs-body">
-      <div class="ljs-scanning">
-        <div class="ljs-spinner"></div>
-        <p>Scanning jobs on this page...</p>
-      </div>
-    </div>
+    <div class="ljs-body" id="ljs-body"></div>
   `;
   document.body.appendChild(sidebar);
   document.getElementById("ljs-close-btn").addEventListener("click", () => {
@@ -71,14 +56,13 @@ async function startScan(apiKey) {
 
     if (jobs.length === 0) {
       showError(
-        `No jobs found.<br><br>` +
-          `<small style="color:#64748b">Make sure job listings are visible on the left panel, then try again.</small>`,
+        "No jobs found. Make sure job listings are visible on the left panel, then try again.",
       );
       isScanning = false;
       return;
     }
 
-    showScanning(`Found ${jobs.length} jobs - asking Claude AI...`);
+    showScanning(`Found ${jobs.length} jobs — asking Claude AI...`);
 
     const timeout = new Promise((_, reject) =>
       setTimeout(() => reject(new Error("Timed out after 45s")), 45000),
@@ -109,133 +93,48 @@ function collectJobs() {
   const jobs = [];
   const seen = new Set();
 
-  // LinkedIn now uses hashed class names - so we find job cards by their
-  // structural role: each job card is a <li> that contains:
-  //   1. A visible job title span (the first meaningful text)
-  //   2. A company name
-  //   3. A location
-  // We find the <ul> whose <li> children look like job cards.
+  // Every other span._794ff500 is the visible title (odd ones are aria-hidden duplicates)
+  const titleSpans = Array.from(
+    document.querySelectorAll("span._794ff500"),
+  ).filter((_, i) => i % 2 === 0);
 
-  // Find all <li> elements that look like job cards
-  const allLi = Array.from(document.querySelectorAll("li"));
-
-  for (const li of allLi) {
+  for (const span of titleSpans) {
     try {
-      // Each job card li should have a role="button" or similar interactive div inside
-      // and contain at least 3 distinct text nodes (title, company, location)
-      const paragraphs = Array.from(li.querySelectorAll("p, span"))
-        .map((el) => el.innerText?.trim())
-        .filter((t) => t && t.length > 1 && t.length < 200);
+      // Walk up to the job card container
+      const cardEl =
+        span.closest("div._2f9e3fe1")?.parentElement?.parentElement;
+      if (!cardEl) continue;
 
-      if (paragraphs.length < 2) continue;
-
-      // Skip nav items, footers, etc.
-      if (li.closest("nav") || li.closest("footer") || li.closest("header"))
-        continue;
-
-      // The title span uses _794ff500 class in current LinkedIn build
-      // but we also fallback to first meaningful <p> text
-      const titleSpan = li.querySelector("span._794ff500");
-      const title = titleSpan ? titleSpan.innerText.trim() : paragraphs[0];
-
-      if (!title || title.length < 3) continue;
-
-      // Skip obvious non-job items
-      const skipWords = [
-        "home",
-        "jobs",
-        "messaging",
-        "notifications",
-        "network",
-        "post a job",
-        "sign in",
-        "join now",
-      ];
-      if (skipWords.some((w) => title.toLowerCase() === w)) continue;
-
-      // Company: usually the paragraph right after the title
-      // Location: usually contains city/country and "(Remote)" or "(Hybrid)"
-      let company = "";
-      let location = "";
-      let salary = "";
-
-      // Find salary (contains $ or /yr or /hr)
-      const salaryEl = li.querySelector("span, p");
-      const allTexts = Array.from(li.querySelectorAll("p, span"))
-        .map((el) => el.innerText?.trim())
+      const lines = cardEl.innerText
+        .split("\n")
+        .map((l) => l.trim())
         .filter(Boolean);
 
-      for (const text of allTexts) {
-        if (
-          !salary &&
-          (text.includes("$") || text.includes("/yr") || text.includes("/hr"))
-        ) {
-          salary = text;
-        }
-        if (
-          !company &&
-          text !== title &&
-          text.length > 1 &&
-          text.length < 100 &&
-          !text.includes("$") &&
-          !text.match(/\d+ (month|week|day|hour)s? ago/i) &&
-          !text.includes("Easy Apply") &&
-          !text.includes("Apply") &&
-          company === ""
-        ) {
-          company = text;
-        }
-        if (
-          !location &&
-          (text.includes("Remote") ||
-            text.includes("Hybrid") ||
-            text.includes("On-site") ||
-            text.match(/[A-Z][a-z]+,\s[A-Z]{2}/) || // City, ST
-            text.match(/[A-Z][a-z]+,\s[A-Z][a-z]+/)) // City, Country
-        ) {
-          location = text;
-        }
-      }
+      // Title is first line, strip "Selected, " prefix if present
+      const title = lines[0]?.replace(/^Selected,\s*/i, "") || "";
+      const company = lines[2] || "";
+      const location = lines[3] || "";
+
+      if (!title) continue;
 
       const key = `${title}|${company}`;
       if (seen.has(key)) continue;
       seen.add(key);
 
-      // Only add if it looks like a real job (has title + at least company or location)
-      if (title && (company || location)) {
-        jobs.push({
-          title: title.slice(0, 120),
-          company: company.slice(0, 100),
-          location: location.slice(0, 100),
-          salary: salary.slice(0, 50),
-          description: "",
-        });
-      }
+      jobs.push({ title, company, location, description: "" });
     } catch (e) {
-      /* skip */
+      /* skip bad cards */
     }
   }
 
-  // Grab the currently open job description panel
-  // Look for the largest text block on the right side of the page
-  const descCandidates = Array.from(
-    document.querySelectorAll("div, section, article"),
-  )
-    .filter((el) => {
-      const text = el.innerText?.trim() || "";
-      return (
-        text.length > 300 &&
-        (text.toLowerCase().includes("responsibilities") ||
-          text.toLowerCase().includes("requirements") ||
-          text.toLowerCase().includes("qualifications") ||
-          text.toLowerCase().includes("about the role") ||
-          text.toLowerCase().includes("what you"))
-      );
-    })
-    .sort((a, b) => b.innerText.length - a.innerText.length);
+  // Grab the currently visible job description from the right panel
+  // Stable pattern: LinkedIn always starts descriptions with "About the job"
+  const descEl = Array.from(document.querySelectorAll("div")).find((d) =>
+    d.innerText?.trim().startsWith("About the job"),
+  );
 
-  if (descCandidates.length > 0 && jobs.length > 0) {
-    jobs[0].description = descCandidates[0].innerText.trim().slice(0, 3000);
+  if (descEl && jobs.length > 0) {
+    jobs[0].description = descEl.innerText.trim().slice(0, 3000);
   }
 
   return jobs;
@@ -298,8 +197,7 @@ function showResults(jobs) {
               <span class="ljs-job-index">${i + 1}</span>
               <div>
                 <div class="ljs-job-title">${esc(job.title)}</div>
-                <div class="ljs-job-company">${esc(job.company)} ${job.location ? "· " + esc(job.location) : ""}</div>
-                ${job.salary ? `<div class="ljs-salary">💰 ${esc(job.salary)}</div>` : ""}
+                <div class="ljs-job-company">${esc(job.company)}${job.location ? " · " + esc(job.location) : ""}</div>
               </div>
             </div>
             <div class="ljs-badges">
