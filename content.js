@@ -8,6 +8,8 @@
 let sidebar = null;
 let isScanning = false;
 
+const iconUrl = chrome.runtime.getURL("icons/icon48.png");
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "START_SCAN") {
     startScan(message.apiKey);
@@ -30,7 +32,7 @@ function createSidebar() {
   sidebar.innerHTML = `
     <div class="ljs-header">
       <div class="ljs-header-left">
-        <span class="ljs-logo">⚡</span>
+        <img src="${iconUrl}" style="width:24px;height:24px;">
         <span class="ljs-title">Job Scanner</span>
       </div>
       <button class="ljs-close" id="ljs-close-btn">✕</button>

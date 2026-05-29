@@ -3,6 +3,12 @@
   "name": "LinkedIn Job Scanner",
   "version": "1.0.0",
   "description": "Scan and summarize LinkedIn job listings using Claude AI",
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*"],
+      "matches": ["https://www.linkedin.com/*"]
+    }
+  ],
   "permissions": [
     "activeTab",
     "storage",

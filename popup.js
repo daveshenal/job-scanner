@@ -48,7 +48,7 @@ async function render() {
     </div>
 
     <button class="scan-btn" id="scan-btn" ${!apiKey ? "disabled" : ""}>
-      ⚡ Scan Jobs on This Page
+      <img src="icons/icon48.png" style="width:20px;height:20px;vertical-align:middle;margin-right:6px;"> Scan Jobs on This Page
     </button>
 
     <button class="toggle-btn" id="toggle-btn">
