@@ -3,41 +3,46 @@
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "ANALYZE_JOBS") {
     analyzeJobsWithClaude(message.jobs, message.apiKey)
-      .then(result => sendResponse({ success: true, data: result }))
-      .catch(err => sendResponse({ success: false, error: err.message }));
+      .then((result) => sendResponse({ success: true, data: result }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
     return true; // Keep channel open for async
   }
 
   if (message.type === "ANALYZE_SINGLE_JOB") {
     analyzeSingleJob(message.job, message.apiKey)
-      .then(result => sendResponse({ success: true, data: result }))
-      .catch(err => sendResponse({ success: false, error: err.message }));
+      .then((result) => sendResponse({ success: true, data: result }))
+      .catch((err) => sendResponse({ success: false, error: err.message }));
     return true;
   }
 });
 
 async function analyzeJobsWithClaude(jobs, apiKey) {
-  const jobList = jobs.map((j, i) =>
-    `Job ${i + 1}:
+  const jobList = jobs
+    .map(
+      (j, i) =>
+        `Job ${i + 1}:
     Title: ${j.title}
     Company: ${j.company}
     Location: ${j.location}
-    Description: ${j.description || "Not loaded yet"}`
-  ).join("\n\n---\n\n");
+    Description: ${j.description || "Not loaded yet"}`,
+    )
+    .join("\n\n---\n\n");
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01"
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 2000,
-      messages: [{
-        role: "user",
-        content: `You are a job analysis assistant. Analyze the following job listings and return a JSON array.
+      max_tokens: 8000,
+      messages: [
+        {
+          role: "user",
+          content: `You are a job analysis assistant. Analyze the following job listings and return a JSON array.
 
 For each job return:
 - title (string)
@@ -52,9 +57,10 @@ For each job return:
 Return ONLY a valid JSON array, no markdown, no explanation.
 
 Jobs to analyze:
-${jobList}`
-      }]
-    })
+${jobList}`,
+        },
+      ],
+    }),
   });
 
   if (!response.ok) {
@@ -64,7 +70,8 @@ ${jobList}`
 
   const data = await response.json();
   const text = data.content[0].text.trim();
-  return JSON.parse(text);
+  const cleaned = text.replace(/```json|```/g, "").trim();
+  return JSON.parse(cleaned);
 }
 
 async function analyzeSingleJob(job, apiKey) {
@@ -73,14 +80,15 @@ async function analyzeSingleJob(job, apiKey) {
     headers: {
       "Content-Type": "application/json",
       "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01"
+      "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      messages: [{
-        role: "user",
-        content: `Analyze this job listing and return a JSON object.
+      max_tokens: 8000,
+      messages: [
+        {
+          role: "user",
+          content: `Analyze this job listing and return a JSON object.
 
 Return:
 - summary (2 sentence summary)
@@ -97,9 +105,10 @@ Job:
 Title: ${job.title}
 Company: ${job.company}
 Location: ${job.location}
-Description: ${job.description}`
-      }]
-    })
+Description: ${job.description}`,
+        },
+      ],
+    }),
   });
 
   if (!response.ok) {
@@ -109,5 +118,6 @@ Description: ${job.description}`
 
   const data = await response.json();
   const text = data.content[0].text.trim();
-  return JSON.parse(text);
+  const cleaned = text.replace(/```json|```/g, "").trim();
+  return JSON.parse(cleaned);
 }
