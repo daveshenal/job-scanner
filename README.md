@@ -19,11 +19,12 @@ Scan and summarize LinkedIn job listings in bulk using Claude AI. No more clicki
 
 ## 🚀 Installation (Chrome)
 
-1. **Download & unzip** this folder somewhere on your computer
-2. Open Chrome and go to `chrome://extensions`
-3. Enable **Developer Mode** (top-right toggle)
-4. Click **"Load unpacked"** → select the unzipped folder
-5. The extension icon appears in your Chrome toolbar
+1. **Download** the latest release zip from [here](https://github.com/daveshenal/job-scanner/releases/latest)
+2. **Unzip** the downloaded file somewhere on your computer
+3. Open Chrome and go to `chrome://extensions`
+4. Enable **Developer Mode** (top-right toggle)
+5. Click **"Load unpacked"** → select the unzipped folder
+6. The extension icon appears in your Chrome toolbar
 
 ---
 
