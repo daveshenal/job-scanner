@@ -1,8 +1,6 @@
-# <img src="icons/icon48.png" width="28" valign="middle"> LinkedIn Job Scanner - Chrome Extension
+# <img src="icons/icon48.png" width="38" valign="middle"> LinkedIn Job Scanner - Chrome Extension
 
 Scan and summarize LinkedIn job listings in bulk using Claude AI. No more clicking into each job one by one!
-
-## 📸 Screenshots
 
 <table>
   <tr>
@@ -40,7 +38,7 @@ Scan and summarize LinkedIn job listings in bulk using Claude AI. No more clicki
 ## 📖 How to Use
 
 1. Go to `https://www.linkedin.com/jobs/`
-2. Search for any role (e.g. "Machine Learning Engineer")
+2. Search for any role (e.g. "Software Engineer")
 3. Wait for the job list to fully load on the left panel
 4. Click the extension icon
 5. Click **"Scan Jobs on This Page"**
@@ -177,5 +175,8 @@ Replace `_794ff500` and `_2f9e3fe1` with the new class names at the top of `coll
 
 - Your API key is stored locally in Chrome only - never sent anywhere except Anthropic's API
 - This extension reads what's visible on your screen - no credentials are stored or misused
-- Jobs are processed in batches of 5 to stay within API token limits
 - Use for personal job searching only - respect LinkedIn's Terms of Service
+
+## 🙏 Credits
+
+Icon designed by [Abdul-Aziz](https://www.flaticon.com/free-icon/job-search_17215344) from [Flaticon](https://www.flaticon.com)
